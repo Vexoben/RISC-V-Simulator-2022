@@ -1,6 +1,8 @@
 #ifndef _include_
 #define _include_
+#define debug(x) std::cout << #x << ": " << (x) << std::endl;
 #include<string>
+#include<cassert>
 
 const int RS_size = 100;
 const int IQ_size = 32;
@@ -31,7 +33,8 @@ enum state {
 
 struct instruction {
    ins_type type;
-   unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB, pred_jump, actu_jump;
+   unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB;
+   state pred_jump, actu_jump;
 };
 
 struct regfile {
@@ -46,6 +49,7 @@ unsigned int pc_in, pc_out, pc_pred;
 unsigned char mem[5000000];
 
 unsigned int read_memory(int pos, int len) {
+   // std::cout << "read_momory" << pos << ' ' << len << std::endl;
    unsigned int res = 0;
    for (int i = 0; i < len; ++i) {
       res |= mem[pos + i] << (i << 3);
@@ -65,7 +69,7 @@ int signed_extend(unsigned int c, int bit) {
 }
 
 bool is_branch_instruction(ins_type tp) {
-   if (tp == AUIPC || tp == JAL || tp == JALR || tp == BEQ || tp == BNE 
+   if (tp == JAL || tp == JALR || tp == BEQ || tp == BNE 
       || tp == BLT || tp == BGE || tp == BLTU || tp == BGEU) {
       return 1;
    } else return 0;
@@ -79,34 +83,18 @@ bool is_change_reg_instruction(ins_type tp) {
    return tp <= JALR || (LB <= tp && tp <= LHU) || (tp >= ADDI);
 }
 
-template<class datatype, int capcity = 100>
+template<class datatype, int capacity>
 class Queue {
  public:
    int head, tail, cap;
 
-   void double_space() {
-      datatype *area = new datatype[cap * 2];
-      int i, tmp;
-      for (i = 1, tmp = (head + 1) % cap;; ++i) {
-         area[i] = data[tmp];
-         if (tmp == tail) break;
-         tmp = (tmp + 1) % cap;
-      }
-      head = 0; tail = i;
-      cap *= 2;
-      delete []data;
-      data = area;
-   }
  public:
-   datatype *data;
+   datatype data[capacity];
    Queue() {
+      cap = capacity;
       head = tail = 0;
-      cap = capcity;
-      data = new datatype[capcity];
    }
-   ~Queue() {
-      delete []data;
-   }
+   ~Queue() {}
    bool empty() {
       return head == tail;
    }
@@ -120,20 +108,20 @@ class Queue {
       head = (head + 1) % cap;
    }
    int push(datatype tmp) {
-      if (full()) double_space();
       tail = (tail + 1) % cap;
       data[tail] = tmp;
       return tail;
    }
    void operator = (const Queue &obj) {
-      delete []data;
-      data = new datatype[obj.cap];
-      cap = obj.cap;
+      assert(cap == obj.cap);
       head = obj.head;
       tail = obj.tail;
       for (int i = 0; i < cap; ++i) {
          data[i] = obj.data[i];
       }
+   }
+   datatype& operator [] (const int pos) {
+      return data[pos];
    }
    int next_pos() {
       return (tail + 1) % cap;
@@ -151,41 +139,19 @@ class IQ {
 class INS_node {
  public:
    state busy;
-   int Vj, Vk, Qj, Qk; // rs1, rs2
+   unsigned int Vj, Vk;
+   int Qj, Qk; // rs1, rs2
    instruction ins;
-
-   void modifyVQ(int &V, int &Q, int rs) {
-      if (reg_in[rs].Qj != -1) {
-         Q = reg_in[rs].Qj;
-      } else {
-         Q = -1;
-         V = reg_in[rs].value;
-      }
-   }
 
    INS_node() {
       busy = NO;
+      Qj = Qk = -1;
+      ins.type = none;
    }
 
    INS_node(instruction _ins) {
       ins = _ins;
-      if (0 <= ins.type && ins.type <= 2) { // LUI, AUIPC, JAL
-      } else if (ins.type == 3) { // JALR
-         modifyVQ(Vj, Qj, ins.rs1);
-      } else if (4 <= ins.type && ins.type <= 9) { // BEQ, BNE, BLT, BGE, BLTU, BGEU
-         modifyVQ(Vj, Qj, ins.rs1);
-         modifyVQ(Vk, Qk, ins.rs2);
-      } else if (10 <= ins.type && ins.type <= 14) { // LB, LH, LW, LBU, LHU
-         modifyVQ(Vj, Qj, ins.rs1);
-      } else if (15 <= ins.type && ins.type <= 17) { // SB, SH, SW,
-         modifyVQ(Vj, Qj, ins.rs1);
-         modifyVQ(Vk, Qk, ins.rs2);
-      } else if (18 <= ins.type && ins.type <= 26) { // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
-         modifyVQ(Vj, Qj, ins.rs1);
-      } else if (27 <= ins.type && ins.type <= 37) {
-         modifyVQ(Vj, Qj, ins.rs1);
-         modifyVQ(Vk, Qk, ins.rs2);         
-      }
+      Qj = Qk = -1;
       busy = YES;
    }
 };
@@ -198,7 +164,7 @@ class RS {
 
       bool insert(INS_node node) {
          for (int i = 0; i < RS_size; ++i) {
-            if (data[i].ins.type == none) {
+            if (data[i].busy == NO) {
                data[i] = node;
                return 0;
             }
@@ -209,7 +175,7 @@ class RS {
 
    bool full() {
       for (int i = 0; i < RS_size; ++i) {
-         if (RS_in.data[i].ins.type == none) {
+         if (RS_in.data[i].busy == NO) {
             return 0;
          }
       }
@@ -218,6 +184,15 @@ class RS {
 
    void update() {
       RS_in = RS_out;
+   }
+
+   void output() {
+      puts("RS state");
+      for (int  i = 0; i < RS_size; ++i) {
+         if (RS_in.data[i].busy == YES) {
+            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << std::endl;
+         }
+      }
    }
 }myRS;
 
@@ -231,7 +206,7 @@ class ALU {
 
 class SLB {
  public:
-   Queue<INS_node> SLB_in, SLB_out;
+   Queue<INS_node, SLB_size> SLB_in, SLB_out;
    bool empty() {
       return SLB_in.empty();
    }
@@ -247,6 +222,15 @@ class SLB {
    INS_node& operator [] (int pos) {
       return SLB_out.data[pos];
    }
+   void output() {
+      puts("SLB OUTPUT");
+     debug(SLB_out.head);
+      Queue<INS_node, SLB_size> tmp = SLB_out;
+      while (!tmp.empty()) {
+         INS_node ins_node = tmp.front(); tmp.pop();
+         std::cout << ins_node.busy << ' ' << ins_node.ins.type << std::endl;
+      }
+   }
 }mySLB;
 
 class ROB_node {
@@ -255,6 +239,11 @@ class ROB_node {
    int dest;
    unsigned int value, pc_to;
    instruction ins;
+
+   ROB_node() {
+      busy = NO;
+      ready = NO;
+   }
 };
 
 class ROB {

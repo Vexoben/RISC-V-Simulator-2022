@@ -1,7 +1,453 @@
+#ifndef _include_
+#define _include_
+#define debug(x) std::cout << #x << ": " << (x) << std::endl;
+#include<string>
+#include<cassert>
+#include<iostream>
+
+const int RS_size = 100;
+const int IQ_size = 32;
+const int SLB_size = 32;
+const int ROB_size = 64;
+const int reg_num = 32;
+
+const std::string op_type[] = {"LUI", "AUIPC", "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BLTU", "BGEU",
+                              "LB", "LH", "LW", "LBU", "LHU", "SB", "SH", "SW", "ADDI", "SLTI", "SLTIU",
+                              "XORI", "ORI", "ANDI", "SLLI", "SRLI", "SRAI", "ADD", "SUB", "SLL", "SLT",
+                              "SLTU", "XOR", "SRL", "SRA", "OR", "AND", "LI"};
+
+enum ins_type {
+   none = -1,
+   LUI, 
+   AUIPC,
+   JAL, JALR, BEQ, BNE, BLT, BGE, BLTU, BGEU,
+   LB, LH, LW, LBU, LHU,
+   SB, SH, SW,
+   ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI, 
+   ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND,
+   LI
+};
+
+enum state {
+   YES, NO
+};
+
+struct instruction {
+   ins_type type;
+   unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB;
+   state pred_jump, actu_jump;
+};
+
+struct regfile {
+   unsigned int value;
+   int Qj;
+   regfile() {
+      Qj = -1;
+   }
+}reg_in[reg_num], reg_out[reg_num];
+
+unsigned int pc_in, pc_out, pc_pred;
+unsigned char mem[5000000];
+
+unsigned int read_memory(int pos, int len) {
+   // std::cout << "read_momory" << pos << ' ' << len << std::endl;
+   unsigned int res = 0;
+   for (int i = 0; i < len; ++i) {
+      res |= mem[pos + i] << (i << 3);
+   }
+   return res;
+}
+
+void write_memory(unsigned int value, int pos, int len) {
+   for (int i = 0; i < len; ++i) {
+      mem[pos + i] = value & 0xFF;
+      value >>= 8;
+   }
+}
+
+int signed_extend(unsigned int c, int bit) {
+   return c >> (bit - 1) & 1 ? c | (0xFFFFFFFF >> bit << bit) : c;
+}
+
+bool is_branch_instruction(ins_type tp) {
+   if (tp == JAL || tp == JALR || tp == BEQ || tp == BNE 
+      || tp == BLT || tp == BGE || tp == BLTU || tp == BGEU) {
+      return 1;
+   } else return 0;
+}
+
+bool is_file_instruction(ins_type tp) {
+   return LB <= tp && tp <= SW;
+}
+
+bool is_change_reg_instruction(ins_type tp) {
+   return tp <= JALR || (LB <= tp && tp <= LHU) || (tp >= ADDI);
+}
+
+template<class datatype, int capacity>
+class Queue {
+ public:
+   int head, tail, cap;
+
+ public:
+   datatype data[capacity];
+   Queue() {
+      cap = capacity;
+      head = tail = 0;
+   }
+   ~Queue() {}
+   bool empty() {
+      return head == tail;
+   }
+   bool full() {
+      return (tail + 1) % cap == head;
+   }
+   datatype front() {
+      return data[(head + 1) % cap];
+   }
+   void pop() {
+      head = (head + 1) % cap;
+   }
+   int push(datatype tmp) {
+      tail = (tail + 1) % cap;
+      data[tail] = tmp;
+      return tail;
+   }
+   void operator = (const Queue &obj) {
+      assert(cap == obj.cap);
+      head = obj.head;
+      tail = obj.tail;
+      for (int i = 0; i < cap; ++i) {
+         data[i] = obj.data[i];
+      }
+   }
+   datatype& operator [] (const int pos) {
+      return data[pos];
+   }
+   int next_pos() {
+      return (tail + 1) % cap;
+   }
+};
+
+class IQ {
+ public:
+   Queue<instruction, IQ_size> IQ_in, IQ_out;
+   void update() {
+      IQ_in = IQ_out;
+   }
+}myIQ;
+
+class INS_node {
+ public:
+   state busy;
+   unsigned int Vj, Vk;
+   int Qj, Qk; // rs1, rs2
+   instruction ins;
+
+   INS_node() {
+      busy = NO;
+      Qj = Qk = -1;
+      ins.type = none;
+   }
+
+   INS_node(instruction _ins) {
+      ins = _ins;
+      Qj = Qk = -1;
+      busy = YES;
+   }
+};
+
+class RS {
+ public:
+   class rs {
+    public:
+      INS_node data[RS_size];
+
+      bool insert(INS_node node) {
+         for (int i = 0; i < RS_size; ++i) {
+            if (data[i].busy == NO) {
+               data[i] = node;
+               return 0;
+            }
+         }
+         return 1;
+      }
+   }RS_in, RS_out;
+
+   bool full() {
+      for (int i = 0; i < RS_size; ++i) {
+         if (RS_in.data[i].busy == NO) {
+            return 0;
+         }
+      }
+      return 1;
+   }
+
+   void update() {
+      RS_in = RS_out;
+   }
+
+   void output() {
+      puts("RS state");
+      for (int  i = 0; i < RS_size; ++i) {
+         if (RS_in.data[i].busy == YES) {
+            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << std::endl;
+         }
+      }
+   }
+}myRS;
+
+class ALU {
+ public:
+   INS_node ALU_in, ALU_out;
+   void update() {
+      ALU_in = ALU_out;
+   }
+}myALU;
+
+class SLB {
+ public:
+   Queue<INS_node, SLB_size> SLB_in, SLB_out;
+   bool empty() {
+      return SLB_in.empty();
+   }
+   bool full() {
+      return SLB_in.full();
+   }
+   void change_busy() {
+      SLB_out.data[(SLB_out.head + 1) % SLB_out.cap].busy = NO;
+   }
+   void update() {
+      SLB_in = SLB_out;
+   }
+   INS_node& operator [] (int pos) {
+      return SLB_out.data[pos];
+   }
+   void output() {
+      puts("SLB OUTPUT");
+     debug(SLB_out.head);
+      Queue<INS_node, SLB_size> tmp = SLB_out;
+      while (!tmp.empty()) {
+         INS_node ins_node = tmp.front(); tmp.pop();
+         std::cout << ins_node.busy << ' ' << ins_node.ins.type << std::endl;
+      }
+   }
+}mySLB;
+
+class ROB_node {
+ public:
+   state busy, ready;
+   int dest;
+   unsigned int value, pc_to;
+   instruction ins;
+
+   ROB_node() {
+      busy = NO;
+      ready = NO;
+   }
+};
+
+class ROB {
+ public:
+   Queue<ROB_node, 64> ROB_in, ROB_out;
+   bool empty() {
+      return ROB_in.empty();
+   }
+   bool full() {
+      return ROB_in.full();
+   }
+   void update() {
+      ROB_in = ROB_out;
+   }
+   ROB_node& operator [] (int pos) {
+      return ROB_out.data[pos];
+   }
+}myROB;
+
+
+#endif
+
+void input() {
+   int c = getchar(); int pos = 0;
+   while (c != EOF) {
+      while (c != '@' && !isdigit(c) && !isalpha(c) && c != EOF) c = getchar();
+      if (c == EOF) break;
+      if (c == '@') {
+         for (c = getchar(), pos = 0; isdigit(c) || isalpha(c); c = getchar()) {
+            pos = (pos << 4) + (isdigit(c) ? c - '0' : c - 'A' + 10);
+         }
+      } else {
+         for (; isdigit(c) || isalpha(c); c = getchar()) {
+            mem[pos] = (mem[pos] << 4) + (isdigit(c) ? c - '0' : c - 'A' + 10);
+         }
+         ++pos;
+      }
+   }
+}
+
+unsigned int get_instruction(int pc) { //注意这边没有传引用
+   unsigned int res = 0;
+   for (int i = 0; i < 4; ++i) {
+      res |= mem[pc++] << (i << 3);
+   }
+   return res;
+}
+
+instruction decode_instruction(unsigned int code, unsigned int pc) {
+   instruction ins;
+   if (code == 0x0ff00513) {
+      ins.type = LI;
+      ins.rd = ins.rs1 = ins.rs2 = ins.imm = 0;
+      ins.pc = pc;
+      return ins;
+   }
+   ins.type == none;
+   ins.pc = pc;
+   ins.rd = code >> 7 & 0x1F;
+   ins.rs1 = code >> 15 & 0x1F;
+   ins.rs2 = code >> 20 & 0x1F;
+   switch(code & 0x7F) {
+      case 0x37:
+         ins.type = LUI;
+         ins.imm = signed_extend(code >> 12, 20);
+         break;
+      case 0x17:
+         ins.type = AUIPC;
+         ins.imm = signed_extend(code >> 12, 20);
+         break;
+      case 0x6F:
+         ins.type = JAL;
+         ins.imm = (code >> 31 & 1) << 20 | (code >> 21 & 0x3FF) << 1 | (code >> 20 & 1) << 11 | (code >> 12 & 0xFF) << 12;
+         ins.imm = signed_extend(ins.imm, 21);
+         break;
+      case 0x67:
+         ins.type = JALR;
+         ins.imm = signed_extend(code >> 20, 12);
+         break;
+      case 0x63:
+         ins.imm = (code >> 8 & 0xF) << 1 | (code >> 25 & 0x3F) << 5 | (code >> 7 & 1) << 11 | (code >> 31 & 1) << 12; 
+         ins.imm = signed_extend(ins.imm, 13);
+         switch (code >> 12 & 7) {
+            case 0:
+               ins.type = BEQ;
+               break;
+            case 1:
+               ins.type = BNE;
+               break;
+            case 4:
+               ins.type = BLT;
+               break;
+            case 5:
+               ins.type = BGE;
+               break;
+            case 6:
+               ins.type = BLTU;
+               break;
+            case 7:
+               ins.type = BGEU;
+               break;
+         }
+         break;
+      case 3:
+         ins.imm = signed_extend(code >> 20, 12);
+         switch (code >> 12 & 7) {
+            case 0:
+               ins.type = LB;
+               break;
+            case 1:
+               ins.type = LH;
+               break;
+            case 2:
+               ins.type = LW;
+               break;
+            case 4:
+               ins.type = LBU;
+               break;
+            case 5:
+               ins.type = LHU;
+               break;
+         }
+         break;
+      case 0x23:
+         ins.imm = (code >> 7 & 0x1F) | (code >> 25) << 5;
+         ins.imm = signed_extend(ins.imm, 12);
+         switch (code >> 12 & 7) {
+            case 0:
+               ins.type = SB;
+               break;
+            case 1:
+               ins.type = SH;
+               break;
+            case 2:
+               ins.type = SW;
+               break;
+         }
+         break;
+      case 0x13:
+         ins.imm = signed_extend(code >> 20, 12);
+         ins.shamt = ins.rs2;
+         switch (code >> 12 & 7) {
+            case 0:
+               ins.type = ADDI;
+               break;
+            case 2:
+               ins.type = SLTI;
+               break;
+            case 3:
+               ins.type = SLTIU;
+               break;
+            case 4:
+               ins.type = XORI;
+               break;
+            case 6:
+               ins.type = ORI;
+               break;
+            case 7:
+               ins.type = ANDI;
+               break;
+            case 1:
+               ins.type = SLLI;
+               break;
+            case 5:
+               ins.type = (code >> 30 & 1) ? SRAI : SRLI;
+               break;
+         }
+         break;
+      case 0x33:
+         switch (code >> 12 & 7) {
+            case 0:
+               ins.type = (code >> 30 & 1) ? SUB : ADD;
+               break;
+            case 1:
+               ins.type = SLL;
+               break;
+            case 2:
+               ins.type = SLT;
+               break;
+            case 3:
+               ins.type = SLTU;
+               break;
+            case 4:
+               ins.type = XOR;
+               break;
+            case 5:
+               ins.type = (code >> 30 & 1) ? SRA : SRL;
+               break;
+            case 6:
+               ins.type = OR;
+               break;
+            case 7:
+               ins.type = AND;
+               break;
+         }
+         break;
+   }
+   return ins;
+}
+
+
 #ifndef _core_
 #define _core_
-#include "include.hpp"
-#include "scanner.hpp"
 
 class brach_predictor {
 public:
@@ -469,3 +915,49 @@ int run_rob() {
 // }
 
 #endif
+
+
+void update() {
+   pc_in = pc_out;
+   for (int i = 0; i < reg_num; ++i) {
+      reg_in[i] = reg_out[i];
+   }
+   myIQ.update();
+   myRS.update();
+   myROB.update();
+   mySLB.update();
+   myALU.update();
+}
+
+int main() {
+//	freopen("array_test1.data", "r", stdin);
+   input();
+   int clk = 0;
+   while (1) {
+      ++clk;
+      // puts("run update");
+      update();
+      // puts("run fetch");
+      fetch();
+      // puts("run issue");
+      issue();
+      // puts("run reservation");
+      run_reservation();
+      // puts("run slbuffer");
+      run_slbuffer();
+      // puts("run ex");
+      run_ex();
+      // puts("run rob");
+      if (run_rob()) break;
+      reg_out[0].Qj = -1;
+      reg_out[0].value = 0;
+      // debug(pc_in);
+      // debug(pc_out);
+      // debug(pc_pred);
+      // std::cout << "--------------------------------" << std::endl;
+      // if (clk == 500) break;
+   }
+   update();
+   std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;
+   return 0;
+}

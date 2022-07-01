@@ -33,8 +33,11 @@ instruction decode_instruction(unsigned int code, unsigned int pc) {
    instruction ins;
    if (code == 0x0ff00513) {
       ins.type = LI;
+      ins.rd = ins.rs1 = ins.rs2 = ins.imm = 0;
+      ins.pc = pc;
       return ins;
    }
+   ins.type == none;
    ins.pc = pc;
    ins.rd = code >> 7 & 0x1F;
    ins.rs1 = code >> 15 & 0x1F;
