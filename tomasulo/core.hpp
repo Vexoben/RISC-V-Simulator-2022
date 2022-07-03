@@ -233,6 +233,7 @@ void run_slbuffer(){
                v = signed_extend(read_memory(ins_node.Vj + ins.imm, 4), 32);
                break;
             case LBU:
+               // std::cout << "!!!!!!!!!!LBU" << ins_node.Vj << ' ' << ins.imm << std::endl;
                v = read_memory(ins_node.Vj + ins.imm, 1);
                break;
             case LHU:
@@ -411,6 +412,7 @@ int run_rob() {
       // std::cout << "type:" << op_type[rob_node.ins.type] << std::endl;
       return 0;
    }
+   // myROB.output();
    // puts("!!!!!!!!!!!!!!!!!!!!!!!ROB");
    // std::cout << op_type[rob_node.ins.type] << std::endl;
    // std::cout << rob_node.dest << ' ' << rob_node.value << std::endl;

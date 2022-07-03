@@ -9,6 +9,7 @@ const int IQ_size = 64;
 const int SLB_size = 64;
 const int ROB_size = 32;
 const int reg_num = 32;
+const int MEM_size = 5000000;
 
 const std::string op_type[] = {"LUI", "AUIPC", "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BLTU", "BGEU",
                               "LB", "LH", "LW", "LBU", "LHU", "SB", "SH", "SW", "ADDI", "SLTI", "SLTIU",
@@ -53,11 +54,12 @@ struct regfile {
 }reg_in[reg_num], reg_out[reg_num];
 
 unsigned int pc_in, pc_out, pc_pred;
-unsigned char mem[50000000];
+unsigned char mem[MEM_size];
 
 unsigned int read_memory(int pos, int len) {
    unsigned int res = 0;
    // std::cout << "read_momory" << pos << ' ' << len << ' ' << res << std::endl;
+   if (pos < 0 || pos >= MEM_size) return 0;
    for (int i = 0; i < len; ++i) {
       res |= mem[pos + i] << (i << 3);
    }
@@ -197,10 +199,10 @@ class RS {
    }
 
    void output() {
-      puts("RS state");
+      puts("************RS state************");
       for (int i = 0; i < RS_size; ++i) {
          if (RS_in.data[i].busy == YES) {
-            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << ' ' << RS_in.data[i].Vj << ' ' << RS_in.data[i].Vk << ' ' << RS_in.data[i].ins.rs1 << ' ' << RS_in.data[i].ins.rs2 << std::endl;
+            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << ' ' << RS_in.data[i].Vj << ' ' << RS_in.data[i].Vk << ' ' << RS_in.data[i].ins.rs1 << ' ' << RS_in.data[i].ins.rs2 << ' ' << ' ' << RS_in.data[i].ins.imm << ' ' << RS_in.data[i].ins.pos_in_ROB << std::endl;
          }
       }
    }
@@ -233,12 +235,13 @@ class SLB {
       return SLB_out.data[pos];
    }
    void output() {
-      puts("SLB OUTPUT");
-     debug(SLB_out.head);
+      puts("###############SLB OUTPUT###########");
+      debug(SLB_in.head);
       Queue<INS_node, SLB_size> tmp = SLB_out;
       while (!tmp.empty()) {
+         int h = tmp.head;
          INS_node ins_node = tmp.front(); tmp.pop();
-         std::cout << ins_node.busy << ' ' << ins_node.ins.type << std::endl;
+         std::cout << ins_node.busy << ' ' << op_type[ins_node.ins.type] << ' ' << ins_node.Vj << ' ' << ins_node.Qj << ' ' << ins_node.ins.pc << ' ' << h << std::endl;
       }
    }
 }mySLB;
@@ -270,6 +273,15 @@ class ROB {
    }
    ROB_node& operator [] (int pos) {
       return ROB_out.data[pos];
+   }
+   void output() {
+      puts("$$$$$$$$$$$$$$$ ROB output $$$$$$$$$$$$$$$");
+      Queue<ROB_node, ROB_size> tmp = ROB_in;
+      while (!tmp.empty()) {
+         int h = tmp.head;
+         ROB_node rob_node = tmp.front(); tmp.pop();
+         // std::cout << rob_node.ins.pos_in_ROB << ' ' << op_type[rob_node.ins.type] << ' ' << rob_node.busy << ' ' << rob_node.ins. std::endl;
+      }
    }
 }myROB;
 
