@@ -37,11 +37,11 @@ int main() {
       if (run_rob()) break;
       reg_out[0].Qj = -1;
       reg_out[0].value = 0;
-      // debug(pc_in);
-      // debug(pc_out);
-      // debug(pc_pred);
-      // std::cout << "--------------------------------" << std::endl;
-      // if (clk == 500) break;
+      debug(pc_in);
+      debug(pc_out);
+      debug(pc_pred);
+      std::cout << "--------------------------------" << std::endl;
+      // if (clk == 100000) break;
    }
    update();
    std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;

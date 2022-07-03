@@ -7,7 +7,7 @@
 const int RS_size = 100;
 const int IQ_size = 32;
 const int SLB_size = 32;
-const int ROB_size = 64;
+const int ROB_size = 32;
 const int reg_num = 32;
 
 const std::string op_type[] = {"LUI", "AUIPC", "JAL", "JALR", "BEQ", "BNE", "BLT", "BGE", "BLTU", "BGEU",
@@ -49,7 +49,7 @@ unsigned int pc_in, pc_out, pc_pred;
 unsigned char mem[5000000];
 
 unsigned int read_memory(int pos, int len) {
-   // std::cout << "read_momory" << pos << ' ' << len << std::endl;
+   std::cout << "read_momory" << pos << ' ' << len << std::endl;
    unsigned int res = 0;
    for (int i = 0; i < len; ++i) {
       res |= mem[pos + i] << (i << 3);
@@ -188,7 +188,7 @@ class RS {
 
    void output() {
       puts("RS state");
-      for (int  i = 0; i < RS_size; ++i) {
+      for (int i = 0; i < RS_size; ++i) {
          if (RS_in.data[i].busy == YES) {
             std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << std::endl;
          }
@@ -248,7 +248,7 @@ class ROB_node {
 
 class ROB {
  public:
-   Queue<ROB_node, 64> ROB_in, ROB_out;
+   Queue<ROB_node, ROB_size> ROB_in, ROB_out;
    bool empty() {
       return ROB_in.empty();
    }

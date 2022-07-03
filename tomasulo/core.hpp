@@ -56,22 +56,22 @@ void determine_QV(INS_node &ins_node) {
    unsigned int &Vj = ins_node.Vj, &Vk = ins_node.Vk;
    int &Qj = ins_node.Qj, &Qk = ins_node.Qk;
    instruction ins = ins_node.ins;
-   if (0 <= ins.type && ins.type <= 2) { // LUI, AUIPC, JAL
-   } else if (ins.type == 3) { // JALR
+   if (LUI <= ins.type && ins.type <= JAL) { // LUI, AUIPC, JAL
+   } else if (ins.type == JALR) { // JALR
       modifyVQ(Vj, Qj, ins.rs1);
-   } else if (4 <= ins.type && ins.type <= 9) { // BEQ, BNE, BLT, BGE, BLTU, BGEU
-      modifyVQ(Vj, Qj, ins.rs1);
-      modifyVQ(Vk, Qk, ins.rs2);
-   } else if (10 <= ins.type && ins.type <= 14) { // LB, LH, LW, LBU, LHU
-      modifyVQ(Vj, Qj, ins.rs1);
-   } else if (15 <= ins.type && ins.type <= 17) { // SB, SH, SW,
+   } else if (BEQ <= ins.type && ins.type <= BGEU) { // BEQ, BNE, BLT, BGE, BLTU, BGEU
       modifyVQ(Vj, Qj, ins.rs1);
       modifyVQ(Vk, Qk, ins.rs2);
-   } else if (18 <= ins.type && ins.type <= 26) { // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+   } else if (LB <= ins.type && ins.type <= LHU) { // LB, LH, LW, LBU, LHU
       modifyVQ(Vj, Qj, ins.rs1);
-   } else if (27 <= ins.type && ins.type <= 37) {
+   } else if (SB <= ins.type && ins.type <= SW) { // SB, SH, SW,
       modifyVQ(Vj, Qj, ins.rs1);
-      modifyVQ(Vk, Qk, ins.rs2);         
+      modifyVQ(Vk, Qk, ins.rs2);
+   } else if (ADDI <= ins.type && ins.type <= SRAI) { // ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI
+      modifyVQ(Vj, Qj, ins.rs1);
+   } else if (ADD <= ins.type && ins.type <= AND) { //ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND
+      modifyVQ(Vj, Qj, ins.rs1);
+      modifyVQ(Vk, Qk, ins.rs2);
    }
 }
 
@@ -118,7 +118,7 @@ void issue() {
             myIQ.IQ_out.pop();
             myRS.RS_out.insert(ins_node);
             myROB.ROB_out.push(rob_node);
-            if (!(4 <= ins.type && ins.type <= 9)) { // not branch
+            if (!(BEQ <= ins.type && ins.type <= BGEU)) { // not branch
                if (ins.rd != 0) {
                  reg_out[ins.rd].Qj = ins_node.ins.pos_in_ROB;
                }
@@ -330,7 +330,7 @@ void run_ex() {
          v = (unsigned int) ins_node.Vj >> ins.shamt;
          break;
       case SRAI: //Shift Right Arithmetic Immediate
-         v = signed_extend(ins_node.Vj >> ins.shamt, 32 - ins.shamt);
+         v = signed_extend((unsigned int) ins_node.Vj >> ins.shamt, 32 - ins.shamt);
          break;
       case ADD:
          v = ins_node.Vj + ins_node.Vk;
@@ -361,6 +361,9 @@ void run_ex() {
          break;
       case AND:
          v = ins_node.Vj & ins_node.Vk;
+         break;
+      default:
+         std::cout << "miss match. type = " << op_type[ins.type] << std::endl;
          break;
    }
    if (is_change_reg_instruction(ins.type)) {
@@ -415,12 +418,12 @@ int run_rob() {
    if (rob_node.ins.type == LI) {
       return 1;
    }
-   else if (10 <= rob_node.ins.type && rob_node.ins.type <= 14) { // load
+   else if (LB <= rob_node.ins.type && rob_node.ins.type <= LHU) { // load
       reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_in[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
+      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
          reg_out[rob_node.dest].Qj = -1;
       }
-   } else if (15 <= rob_node.ins.type && rob_node.ins.type <= 17) { // store
+   } else if (SB <= rob_node.ins.type && rob_node.ins.type <= SW) { // store
       mySLB.SLB_out.pop();
       if (rob_node.ins.type == SB) {
          write_memory(rob_node.value, rob_node.dest, 1);
@@ -432,11 +435,14 @@ int run_rob() {
    } else if (rob_node.ins.type == JAL) {
       pc_out = rob_node.pc_to;
       reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_in[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
+      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
          reg_out[rob_node.dest].Qj = -1;
       }
    } else if ((BEQ <= rob_node.ins.type && rob_node.ins.type <= BGEU) || rob_node.ins.type == JALR) {
       pc_out = rob_node.pc_to;
+      if (rob_node.ins.type == JALR) {
+         reg_out[rob_node.dest].value = rob_node.value;
+      }
       if (rob_node.ins.actu_jump != rob_node.ins.pred_jump || rob_node.ins.type == JALR) {
          pc_pred = pc_out + 4;
          for (int i = 0; i < RS_size; ++i) {
@@ -452,7 +458,7 @@ int run_rob() {
       }
    } else {
       reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_in[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
+      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
          reg_out[rob_node.dest].Qj = -1;
       }
    }
