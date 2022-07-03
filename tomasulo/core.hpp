@@ -441,6 +441,11 @@ int run_rob() {
       pc_out = rob_node.pc_to;
       if (rob_node.ins.type == JALR) {
          run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
+      } else {
+         ++total_predict;
+         if (rob_node.ins.actu_jump == rob_node.ins.pred_jump) {
+            ++accurate_predict;
+         }
       }
       if (rob_node.ins.actu_jump != rob_node.ins.pred_jump || rob_node.ins.type == JALR) {
          pc_pred = pc_out + 4;

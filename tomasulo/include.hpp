@@ -53,6 +53,7 @@ struct regfile {
    }
 }reg_in[reg_num], reg_out[reg_num];
 
+int total_predict, accurate_predict;
 unsigned int pc_in, pc_out, pc_pred;
 unsigned char mem[MEM_size];
 
