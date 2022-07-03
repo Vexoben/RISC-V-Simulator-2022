@@ -5,4 +5,4 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 add_executable(code
-    ./tomasulo/core_2bit_2.cpp)
+    ./tomasulo/Two-bit_2.cpp)
