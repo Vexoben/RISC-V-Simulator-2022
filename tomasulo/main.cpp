@@ -55,6 +55,6 @@ int main() {
    // std::cout << "accurate_predict: " << accurate_predict << std::endl;
    // std::cout << "accurate_radio: " << 1.0 * accurate_predict / total_predict << std::endl;
    // std::cout << "total clock: " << clk << std::endl;
-   // std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;
+   std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;
    return 0;
 }

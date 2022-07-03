@@ -146,8 +146,13 @@ void issue() {
             // std::cout << "RS:" << ((ins.type == -1) ? "none" : op_type[ins.type]) << std::endl;
             // std::cout << "pos in ROB:" << ' ' << ins.pos_in_ROB << std::endl;
             myIQ.IQ_out.pop();
-            myRS.RS_out.insert(ins_node);
             myROB.ROB_out.push(rob_node);
+            // myRS.RS_out.insert(ins_node);
+            if (myRS.empty() && ins_node.Qj == -1 && ins_node.Qk == -1) {
+               myALU.ALU_out = ins_node;
+            } else {
+               myRS.RS_out.insert(ins_node);
+            }
             if (!(BEQ <= ins.type && ins.type <= BGEU)) { // not branch
                if (ins.rd != 0) {
                  reg_out[ins.rd].Qj = ins_node.ins.pos_in_ROB;
@@ -168,7 +173,6 @@ void run_reservation(){
       4. 根据上个周期EX阶段或者SLBUFFER的计算得到的结果遍历Reservation Station，更新相应的值
    */
    // myRS.output();
-   myALU.ALU_out.ins.type = none;
    for (int i = 0; i < RS_size; ++i) {
       INS_node node = myRS.RS_in.data[i];
       if (node.busy == YES && node.Qj == -1 && node.Qk == -1) {

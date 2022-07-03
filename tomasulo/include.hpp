@@ -194,11 +194,17 @@ class RS {
       }
       return 1;
    }
-
+   bool empty() {
+      for (int i = 0; i < RS_size; ++i) {
+         if (RS_in.data[i].busy == YES) {
+            return 0;
+         }
+      }
+      return 1;
+   }
    void update() {
       RS_in = RS_out;
    }
-
    void output() {
       puts("************RS state************");
       for (int i = 0; i < RS_size; ++i) {
@@ -214,6 +220,7 @@ class ALU {
    INS_node ALU_in, ALU_out;
    void update() {
       ALU_in = ALU_out;
+      ALU_out.ins.type = none;
    }
 }myALU;
 
