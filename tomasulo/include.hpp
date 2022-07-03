@@ -5,8 +5,8 @@
 #include<cassert>
 
 const int RS_size = 100;
-const int IQ_size = 32;
-const int SLB_size = 32;
+const int IQ_size = 64;
+const int SLB_size = 64;
 const int ROB_size = 32;
 const int reg_num = 32;
 
@@ -35,22 +35,29 @@ struct instruction {
    ins_type type;
    unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB;
    state pred_jump, actu_jump;
+
+   instruction() {
+      type = none;
+      imm = rs1 = rs2 = rd = shamt = pc = pos_in_ROB = 0;
+      pred_jump = YES; actu_jump = NO;
+   }
 };
 
 struct regfile {
    unsigned int value;
    int Qj;
+   state write_protect;
    regfile() {
       Qj = -1;
    }
 }reg_in[reg_num], reg_out[reg_num];
 
 unsigned int pc_in, pc_out, pc_pred;
-unsigned char mem[5000000];
+unsigned char mem[50000000];
 
 unsigned int read_memory(int pos, int len) {
-   std::cout << "read_momory" << pos << ' ' << len << std::endl;
    unsigned int res = 0;
+   // std::cout << "read_momory" << pos << ' ' << len << ' ' << res << std::endl;
    for (int i = 0; i < len; ++i) {
       res |= mem[pos + i] << (i << 3);
    }
@@ -58,13 +65,16 @@ unsigned int read_memory(int pos, int len) {
 }
 
 void write_memory(unsigned int value, int pos, int len) {
+   // std::cout << "write_memory " << pos << ' ' << len << ' ' << value << std::endl;
    for (int i = 0; i < len; ++i) {
       mem[pos + i] = value & 0xFF;
       value >>= 8;
    }
 }
 
-int signed_extend(unsigned int c, int bit) {
+unsigned int signed_extend(unsigned int c, int bit) {
+   if (bit == 32) return c;
+   // std::cout << "signed_extend " << ' ' << c << ' ' << bit << ' ' << (c >> (bit - 1) & 1 ? c | (0xFFFFFFFF >> bit << bit) : c) << std::endl;
    return c >> (bit - 1) & 1 ? c | (0xFFFFFFFF >> bit << bit) : c;
 }
 
@@ -190,7 +200,7 @@ class RS {
       puts("RS state");
       for (int i = 0; i < RS_size; ++i) {
          if (RS_in.data[i].busy == YES) {
-            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << std::endl;
+            std::cout << op_type[RS_in.data[i].ins.type] << ' ' << RS_in.data[i].Qj << ' ' << RS_in.data[i].Qk << ' ' << RS_in.data[i].Vj << ' ' << RS_in.data[i].Vk << ' ' << RS_in.data[i].ins.rs1 << ' ' << RS_in.data[i].ins.rs2 << std::endl;
          }
       }
    }

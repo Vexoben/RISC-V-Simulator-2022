@@ -7,6 +7,7 @@ void update() {
    pc_in = pc_out;
    for (int i = 0; i < reg_num; ++i) {
       reg_in[i] = reg_out[i];
+      reg_in[i].write_protect = reg_out[i].write_protect = NO;
    }
    myIQ.update();
    myRS.update();
@@ -37,11 +38,16 @@ int main() {
       if (run_rob()) break;
       reg_out[0].Qj = -1;
       reg_out[0].value = 0;
-      debug(pc_in);
-      debug(pc_out);
-      debug(pc_pred);
-      std::cout << "--------------------------------" << std::endl;
-      // if (clk == 100000) break;
+      // debug(pc_in);
+      // debug(pc_out);
+      // debug(pc_pred);
+      // debug(commit_times);
+      // for (int i = 0; i < reg_num; ++i) {
+      //    std::cout << reg_out[i].value << ' ';
+      // }
+      // puts("");
+      // std::cout << "--------------------------------" << std::endl;
+      // if (clk == 5000) break;
    }
    update();
    std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;

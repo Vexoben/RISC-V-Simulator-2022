@@ -3,9 +3,11 @@
 #include "include.hpp"
 #include "scanner.hpp"
 
+int commit_times = 0;
+
 class brach_predictor {
 public:
-void predict(instruction ins) {
+void predict(instruction &ins) {
    if (ins.type != JALR) {
       pc_pred = pc_pred + ins.imm - 4;
       ins.pred_jump = YES;
@@ -75,6 +77,33 @@ void determine_QV(INS_node &ins_node) {
    }
 }
 
+void update_Q(int Q, unsigned int &V) {
+   for (int i = 0; i < RS_size; ++i) {
+      // INS_node &tmp = myRS.RS_out.data[i];
+      if (myRS.RS_in.data[i].busy == YES) {
+         if (myRS.RS_in.data[i].Qj == Q) {
+            myRS.RS_out.data[i].Qj = -1;
+            myRS.RS_out.data[i].Vj = V;
+         }
+         if (myRS.RS_in.data[i].Qk == Q) {
+            myRS.RS_out.data[i].Qk = -1;
+            myRS.RS_out.data[i].Vk = V;
+         }
+      }
+   }
+   for (int i = 0; i < SLB_size; ++i) {
+      // INS_node &tmp = mySLB[i];
+      if (mySLB.SLB_in.data[i].Qj == Q) {
+         mySLB.SLB_out.data[i].Qj = -1;
+         mySLB.SLB_out.data[i].Vj = V;
+      }
+      if (mySLB.SLB_in.data[i].Qk == Q) {
+         mySLB.SLB_out.data[i].Qk = -1;
+         mySLB.SLB_out.data[i].Vk = V;
+      }
+   }
+}
+
 void issue() {
    /*
       在这一部分你需要完成的工作：
@@ -108,6 +137,7 @@ void issue() {
             if (ins.type == LW || ins.type == LH || ins.type == LB || ins.type == LHU || ins.type == LBU) {
                if (ins.rd != 0) {
                   reg_out[ins.rd].Qj = ins_node.ins.pos_in_ROB;
+                  reg_out[ins.rd].write_protect = YES;
                }
             }
          }
@@ -121,6 +151,7 @@ void issue() {
             if (!(BEQ <= ins.type && ins.type <= BGEU)) { // not branch
                if (ins.rd != 0) {
                  reg_out[ins.rd].Qj = ins_node.ins.pos_in_ROB;
+                 reg_out[ins.rd].write_protect = YES;
                }
             }
          }
@@ -209,31 +240,7 @@ void run_slbuffer(){
                break;
          }
          myROB[ins_node.ins.pos_in_ROB].value = v;
-
-         for (int i = 0; i < RS_size; ++i) {
-            INS_node &tmp = myRS.RS_out.data[i];
-            if (tmp.busy == YES) {
-               if (tmp.Qj == ins.pos_in_ROB) {
-                  tmp.Qj = -1;
-                  tmp.Vj = v;
-               }
-               if (tmp.Qk == ins.pos_in_ROB) {
-                  tmp.Qk = -1;
-                  tmp.Vk = v;
-               }
-            }
-         }
-         for (int i = 0; i < SLB_size; ++i) {
-            INS_node &tmp = mySLB[i];
-            if (tmp.Qj == ins.pos_in_ROB) {
-               tmp.Qj = -1;
-               tmp.Vj = v;
-            }
-            if (tmp.Qk == ins.pos_in_ROB) {
-               tmp.Qk = -1;
-               tmp.Vk = v;
-            }
-         }
+         update_Q(ins.pos_in_ROB, v);
       }
    }
 }
@@ -276,6 +283,7 @@ void run_ex() {
          } else pc_to = ins.pc, flag = NO;
          break;
       case BNE: //Branch if Not Equal
+         // std::cout << "EX BNE " << ins_node.Vj << ' ' << ins_node.Vk << std::endl;
          if (ins_node.Vj != ins_node.Vk) {
             pc_to = ins.pc + ins.imm - 4;
             flag = YES;
@@ -363,34 +371,24 @@ void run_ex() {
          v = ins_node.Vj & ins_node.Vk;
          break;
       default:
-         std::cout << "miss match. type = " << op_type[ins.type] << std::endl;
+         // std::cout << "miss match. type = " << op_type[ins.type] << std::endl;
          break;
    }
    if (is_change_reg_instruction(ins.type)) {
-      for (int i = 0; i < RS_size; ++i) {
-         INS_node &tmp = myRS.RS_out.data[i];
-         if (tmp.busy == YES) {
-            if (tmp.Qj == ins.pos_in_ROB) {
-               tmp.Qj = -1;
-               tmp.Vj = v;
-            }
-            if (tmp.Qk == ins.pos_in_ROB) {
-               tmp.Qk = -1;
-               tmp.Vk = v;
-            }
-         }
-      }
-      for (int i = 0; i < SLB_size; ++i) {
-         INS_node &tmp = mySLB[i];
-         if (tmp.Qj == ins.pos_in_ROB) {
-            tmp.Qj = -1;
-            tmp.Vj = v;
-         }
-         if (tmp.Qk == ins.pos_in_ROB) {
-            tmp.Qk = -1;
-            tmp.Vk = v;
-         }
-      }
+      update_Q(ins.pos_in_ROB, v);
+   }
+}
+
+void run_commit(int dest, unsigned int value, int pos_in_ROB){
+   /*
+      在这一部分你需要完成的工作：
+      1. 根据ROB发出的信息更新寄存器的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
+      2. 遇到跳转指令更新pc值，并发出信号清空所有部分的信息存储（这条对于很多部分都有影响，需要慎重考虑）
+   */
+   update_Q(pos_in_ROB, value);
+   reg_out[dest].value = value;
+   if (reg_in[dest].Qj == pos_in_ROB && reg_out[dest].write_protect == NO) {
+      reg_out[dest].Qj = -1;
    }
 }
 
@@ -413,16 +411,16 @@ int run_rob() {
       // std::cout << "type:" << op_type[rob_node.ins.type] << std::endl;
       return 0;
    }
+   // puts("!!!!!!!!!!!!!!!!!!!!!!!ROB");
    // std::cout << op_type[rob_node.ins.type] << std::endl;
+   // std::cout << rob_node.dest << ' ' << rob_node.value << std::endl;
+   ++commit_times;
    myROB.ROB_out.pop();
    if (rob_node.ins.type == LI) {
       return 1;
    }
    else if (LB <= rob_node.ins.type && rob_node.ins.type <= LHU) { // load
-      reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
-         reg_out[rob_node.dest].Qj = -1;
-      }
+      run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
    } else if (SB <= rob_node.ins.type && rob_node.ins.type <= SW) { // store
       mySLB.SLB_out.pop();
       if (rob_node.ins.type == SB) {
@@ -434,14 +432,13 @@ int run_rob() {
       }
    } else if (rob_node.ins.type == JAL) {
       pc_out = rob_node.pc_to;
-      reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
-         reg_out[rob_node.dest].Qj = -1;
-      }
+      // puts("JAL!!!!!!!!");
+      // std::cout << rob_node.dest << ' ' << rob_node.value << ' ' << rob_node.ins.pos_in_ROB << std::endl;
+      run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
    } else if ((BEQ <= rob_node.ins.type && rob_node.ins.type <= BGEU) || rob_node.ins.type == JALR) {
       pc_out = rob_node.pc_to;
       if (rob_node.ins.type == JALR) {
-         reg_out[rob_node.dest].value = rob_node.value;
+         run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
       }
       if (rob_node.ins.actu_jump != rob_node.ins.pred_jump || rob_node.ins.type == JALR) {
          pc_pred = pc_out + 4;
@@ -457,21 +454,10 @@ int run_rob() {
          }
       }
    } else {
-      reg_out[rob_node.dest].value = rob_node.value;
-      if (reg_out[rob_node.dest].Qj == rob_node.ins.pos_in_ROB) {
-         reg_out[rob_node.dest].Qj = -1;
-      }
+      run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
    }
    pc_out += 4;
    return 0;
 }
-
-// void run_commit(){
-//    /*
-//       在这一部分你需要完成的工作：
-//       1. 根据ROB发出的信息更新寄存器的值，包括对应的ROB和是否被占用状态（注意考虑issue和commit同一个寄存器的情况）
-//       2. 遇到跳转指令更新pc值，并发出信号清空所有部分的信息存储（这条对于很多部分都有影响，需要慎重考虑）
-//    */
-// }
 
 #endif
