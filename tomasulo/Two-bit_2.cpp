@@ -51,7 +51,7 @@ int main() {
       // if (clk == 5000) break;
    }
    update();
-   std::cout << total_predict << '|' << accurate_predict << '|' << 1.0 * accurate_predict / total_predict << '|' << clk << '|' << std::endl;
+   // std::cout << total_predict << '|' << accurate_predict << '|' << 1.0 * accurate_predict / total_predict << '|' << clk << '|' << std::endl;
    // std::cout << "total_predict: " << total_predict << std::endl;
    // std::cout << "accurate_predict: " << accurate_predict << std::endl;
    // std::cout << "accurate_radio: " << 1.0 * accurate_predict / total_predict << std::endl;
