@@ -1,7 +1,7 @@
 #include <iostream>
 #include "scanner.hpp"
 #include "include.hpp"
-#include "core.hpp"
+#include "core_adaptive-two-level.hpp"
 
 void update() {
    pc_in = pc_out;
@@ -14,6 +14,7 @@ void update() {
    myROB.update();
    mySLB.update();
    myALU.update();
+   BP.update();
 }
 
 int main() {

@@ -34,7 +34,7 @@ enum state {
 
 struct instruction {
    ins_type type;
-   unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB;
+   unsigned int imm, rs1, rs2, rd, shamt, pc, pos_in_ROB, code;
    state pred_jump, actu_jump;
 
    instruction() {
@@ -292,6 +292,5 @@ class ROB {
       }
    }
 }myROB;
-
 
 #endif

@@ -7,14 +7,38 @@ int commit_times = 0;
 
 class brach_predictor {
 public:
-void predict(instruction &ins) {
-   if (ins.type != JALR) {
-      pc_pred = pc_pred + ins.imm - 4;
-      ins.pred_jump = YES;
-   } else {
-      ins.pred_jump = NO;
+   int change_pos; // 记录修改的位，用于加快模拟速度
+   int bht_in[1 << 12], bht_out[1 << 12];
+
+   brach_predictor() {
+      for (int i = 0; i < (1 << 12); ++i) {
+         bht_in[i] = bht_out[i] = 1;
+      }
    }
-}
+   unsigned int get_hash(int code) {
+      return (code >> 9 & 0x1FF) | ((code >> 20 & 0x7) << 9);
+   }
+   void predict(instruction &ins) {
+      if (ins.type == JALR) {
+         ins.pred_jump = NO;
+         return;
+      }
+      if (ins.type == JAL) {
+         ins.pred_jump = YES;
+         pc_pred = pc_pred + ins.imm - 4;
+         return;
+      }
+      unsigned int tmp = get_hash(ins.code);
+      if (bht_in[tmp] & 2) {
+         pc_pred = pc_pred + ins.imm - 4;
+         ins.pred_jump = YES;
+      } else {
+         ins.pred_jump = NO;
+      }
+   }
+   void update() {
+      bht_in[change_pos] = bht_out[change_pos];
+   }
 }BP;
 
 // 在这一部分你需要完成的工作：
@@ -442,8 +466,40 @@ int run_rob() {
          run_commit(rob_node.dest, rob_node.value, rob_node.ins.pos_in_ROB);
       } else {
          ++total_predict;
+         BP.change_pos = BP.get_hash(rob_node.ins.code);
          if (rob_node.ins.actu_jump == rob_node.ins.pred_jump) {
             ++accurate_predict;
+            int &tmp = BP.bht_out[BP.get_hash(rob_node.ins.code)]; 
+            switch (BP.bht_in[BP.get_hash(rob_node.ins.code)])  {
+               case 0:
+                  tmp = 0;
+                  break;
+               case 1:
+                  tmp = 0;
+                  break;
+               case 2: 
+                  tmp = 3;
+                  break;
+               case 3:
+                  tmp = 3;
+                  break;
+            }
+         } else {
+            int &tmp = BP.bht_out[BP.get_hash(rob_node.ins.code)]; 
+            switch (BP.bht_in[BP.get_hash(rob_node.ins.code)])  {
+               case 0:
+                  tmp = 1;
+                  break;
+               case 1:
+                  tmp = 2;
+                  break;
+               case 2: 
+                  tmp = 1;
+                  break;
+               case 3:
+                  tmp = 2;
+                  break;
+            }
          }
       }
       if (rob_node.ins.actu_jump != rob_node.ins.pred_jump || rob_node.ins.type == JALR) {

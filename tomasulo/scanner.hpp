@@ -37,6 +37,7 @@ instruction decode_instruction(unsigned int code, unsigned int pc) {
       ins.pc = pc;
       return ins;
    }
+   ins.code = code;
    ins.type == none;
    ins.pc = pc;
    ins.rd = code >> 7 & 0x1F;

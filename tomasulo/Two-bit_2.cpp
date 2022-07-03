@@ -1,7 +1,7 @@
 #include <iostream>
 #include "scanner.hpp"
 #include "include.hpp"
-#include "core.hpp"
+#include "core_2bit_2.hpp"
 
 void update() {
    pc_in = pc_out;
@@ -14,6 +14,7 @@ void update() {
    myROB.update();
    mySLB.update();
    myALU.update();
+   BP.update();
 }
 
 int main() {
@@ -55,6 +56,6 @@ int main() {
    // std::cout << "accurate_predict: " << accurate_predict << std::endl;
    // std::cout << "accurate_radio: " << 1.0 * accurate_predict / total_predict << std::endl;
    // std::cout << "total clock: " << clk << std::endl;
-   // std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;
+   std::cout << ((unsigned int) reg_in[10].value & 255u) << std::endl;
    return 0;
 }
